@@ -176,6 +176,13 @@ async function logTicketEvent(client, {
 			]),
 	];
 
+	if (target.reason) {
+		embeds[0].addFields({
+			name: getMessage('log.ticket.reason'),
+			value: target.reason,
+		});
+	}
+
 	if (diff?.original && Object.entries(makeDiff(diff)).length) {
 		embeds.push(
 			new EmbedBuilder()
@@ -187,7 +194,7 @@ async function logTicketEvent(client, {
 
 	return await channel.send({
 		components:
-			action === 'close' ? [
+			action === 'close' && target.archive ? [
 				new ActionRowBuilder()
 					.addComponents(
 						new ButtonBuilder()

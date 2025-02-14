@@ -9,8 +9,8 @@ const unzipper = require('unzipper');
 const { createInterface } = require('node:readline');
 const pkg = require('../../../../../../package.json');
 
-// ! ceiL: at least 1
-const poolSize = Math.ceil(cpus().length / 4);
+// a single persistent pool shared across all imports
+const poolSize = Math.ceil(cpus().length / 4); // ! ceiL: at least 1
 const pool = Pool(() => spawn(new Worker('../../../../../lib/workers/import.js')), { size: poolSize });
 
 function parseJSON(string) {
@@ -49,20 +49,20 @@ module.exports.post = fastify => ({
 		res.raw.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
 
 		const userLog = {
-			_write(style1, style2, prefix, string) {
-				res.raw.write(`<p><span class="${style1}">[${prefix}]</span> <span class="${style2}">${string}</span></p>`);
-			},
 			error(string) {
-				this._write('text-red-500 font-bold', 'text-red-700 dark:text-red-200', 'ERROR', string);
+				this.write('text-red-500 font-bold', 'text-red-700 dark:text-red-200', 'ERROR', string);
 			},
 			info(string) {
-				this._write('text-cyan-500', 'text-cyan-700 dark:text-cyan-200', 'INFO', string);
+				this.write('text-cyan-500', 'text-cyan-700 dark:text-cyan-200', 'INFO', string);
 			},
 			success(string) {
-				this._write('text-green-500', 'text-green-700 dark:text-green-200', 'SUCCESS', string);
+				this.write('text-green-500', 'text-green-700 dark:text-green-200', 'SUCCESS', string);
 			},
 			warn(string) {
-				this._write('text-orange-500', 'text-orange-700 dark:text-orange-200', 'WARN', string);
+				this.write('text-orange-500', 'text-orange-700 dark:text-orange-200', 'WARN', string);
+			},
+			write(style1, style2, prefix, string) {
+				res.raw.write(`<p><span class="${style1}">[${prefix}]</span> <span class="${style2}">${string}</span></p>`);
 			},
 		};
 
@@ -157,12 +157,18 @@ module.exports.post = fastify => ({
 				ticketsPromises.push(pool.queue(worker => worker.importTicket(line, id, categoryMap)));
 			}
 
+			// TODO: batch 100 tickets per query?
 			const ticketsResolved = await Promise.all(ticketsPromises);
 			const queries = [];
 			const allMessages = [];
 
 			for (const [ticket, ticketMessages] of ticketsResolved) {
-				queries.push(client.prisma.ticket.create({ data: ticket }));
+				queries.push(
+					client.prisma.ticket.create({
+						data: ticket,
+						select: { id: true },
+					}),
+				);
 				allMessages.push(...ticketMessages);
 			}
 
