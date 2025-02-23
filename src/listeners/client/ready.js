@@ -1,8 +1,4 @@
 const { Listener } = require('@eartharoid/dbf');
-const {
-	getAvgResolutionTime,
-	getAvgResponseTime,
-} = require('../../lib/stats');
 const ms = require('ms');
 const sync = require('../../lib/sync');
 const checkForUpdates = require('../../lib/updates');
@@ -13,7 +9,10 @@ const {
 	ButtonStyle,
 } = require('discord.js');
 const ExtendedEmbedBuilder = require('../../lib/embed');
-const { sendToHouston } = require('../../lib/stats');
+const {
+	getAverageTimes,
+	sendToHouston,
+} = require('../../lib/stats');
 
 module.exports = class extends Listener {
 	constructor(client, options) {
@@ -48,7 +47,7 @@ module.exports = class extends Listener {
 		await client.application.fetch();
 		if (process.env.PUBLIC_BOT === 'true' && !client.application.botPublic) {
 			client.log.warn('The `PUBLIC_BOT` environment variable is set to `true`, but the bot is not public.');
-		} else if (process.env.PUBLIC_BOT === 'false' && client.application.botPublic) {
+		} else if (process.env.PUBLIC_BOT !== 'true' && client.application.botPublic) {
 			client.log.warn('Your bot is public, but public features are disabled. Set the `PUBLIC_BOT` environment variable to `true`, or make your bot private.');
 		}
 
@@ -69,11 +68,15 @@ module.exports = class extends Listener {
 							firstResponseAt: true,
 						},
 					});
-					const closedTicketsWithResponse = tickets.filter(t => t.firstResponseAt && t.closedAt);
 					const closedTickets = tickets.filter(t => t.closedAt);
+					const closedTicketsWithResponse = closedTickets.filter(t => t.firstResponseAt);
+					const {
+						avgResolutionTime,
+						avgResponseTime,
+					} = await getAverageTimes(closedTicketsWithResponse);
 					cached = {
-						avgResolutionTime: ms(getAvgResolutionTime(closedTicketsWithResponse)),
-						avgResponseTime: ms(getAvgResponseTime(closedTicketsWithResponse)),
+						avgResolutionTime: ms(avgResolutionTime),
+						avgResponseTime: ms(avgResponseTime),
 						guilds: client.guilds.cache.size,
 						openTickets: tickets.length - closedTickets.length,
 						totalTickets: tickets.length,
